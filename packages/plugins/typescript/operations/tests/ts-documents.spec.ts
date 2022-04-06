@@ -5768,6 +5768,55 @@ function test(q: GetEntityBrandDataQuery): void {
       `);
     });
 
+    it('On avoidOptionals:true, aliased fields with @skip, @include should make container resolve into MakeMaybe type', async () => {
+      const schema = buildSchema(/* GraphQL */ `
+        type Query {
+          user(id: ID!): User!
+        }
+
+        type User {
+          id: ID!
+          username: String!
+          email: String!
+        }
+      `);
+
+      const fragment = parse(/* GraphQL */ `
+        query user {
+          user(id: 1) {
+            id
+            username
+            useremail: email @skip(if: true)
+          }
+        }
+      `);
+
+      const { content } = await plugin(
+        schema,
+        [{ location: '', document: fragment }],
+        {
+          avoidOptionals: true,
+          preResolveTypes: false,
+        },
+        {
+          outputFile: 'graphql.ts',
+        }
+      );
+
+      expect(content).toBeSimilarStringTo(`
+        export type UserQueryVariables = Exact<{ [key: string]: never; }>;
+
+        export type UserQuery = (
+          { __typename?: 'Query' }
+          & { user: (
+            { __typename?: 'User' }
+            & Pick<User, 'id' | 'username'>
+            & MakeMaybe<{ useremail: User['email'] }>, 'useremail'>
+          ) }
+        );
+      `);
+    });
+
     it('Should handle "preResolveTypes" and "avoidOptionals" together', async () => {
       const schema = buildSchema(/* GraphQL */ `
         type Query {
